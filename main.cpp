@@ -36,7 +36,7 @@ int ReadTxt(string file)
 	while (getline(infile, s))
 	{
 		int i = 0;
-		string str_temp ="" ;	// 初始化string为空，不用加 ="" 也行
+		string str_temp = "";	// 初始化string为空，不用加 ="" 也行
 		Setdata temp;
 
 		// 分割每一行的数据
@@ -46,7 +46,7 @@ int ReadTxt(string file)
 			{
 				if (s[j + 1] == '\0') temp.label = s[j] - 48;	// 数据最后一个元素是标签
 				else str_temp += s[j];
-			}				
+			}
 			else
 			{
 				/// OneNote!!
@@ -56,8 +56,8 @@ int ReadTxt(string file)
 		}
 		// 将分割好的数据加入vector容器
 		setdata.push_back(temp);
-		
-		/* ======== 以下为 test ======== 
+
+		/* ======== 以下为 test ========
 		cout <<setw(6)<< temp.property[0] << " "
 			<< setw(6) << temp.property[1] << " "
 			<< setw(6) << temp.property[2] << " "
@@ -68,19 +68,19 @@ int ReadTxt(string file)
 	return 0;
 }
 
-double CalEntropy(vector<Setdata> tuple)
+double CalEntropy(vector<Setdata> &tuple)
 {
 	// info(D) = -∑Pi*log2(Pi)
 
 	double entropy = 0;							// 熵
-	double label_qty[LABEL_NUM] = {0};			// 每种标签的个数
+	double label_qty[LABEL_NUM] = { 0 };			// 每种标签的个数
 	const double label_total = tuple.size();	// 标签总数
-	
+
 	if (label_total == 0) return 0;
 
-	for (int i = 0; i < tuple.size(); i++) 
+	for (int i = 0; i < tuple.size(); i++)
 		label_qty[tuple[i].label - 1]++;		// 计算每一种标签的数量
-	
+
 	for (int i = 0; i < LABEL_NUM; i++)
 	{
 		double pi = label_qty[i] / label_total;// label_total 非零值
@@ -93,23 +93,36 @@ double CalEntropy(vector<Setdata> tuple)
 	return entropy;
 }
 
-double CalGain(vector<Setdata> tuple,vector<Setdata> cond ) // 元组 和 相对
+double CalGain(vector<Setdata> &tuple, vector<Setdata> &split_1, vector<Setdata> &split_2)
 {
-	return CalEntropy(tuple) - CalEntropy(cond);
+	return CalEntropy(tuple)
+		- ((double)split_1.size() / tuple.size()*CalEntropy(split_1)
+			+ (double)split_2.size() / tuple.size()*CalEntropy(split_2));
 }
 
-double CalGain_2(vector<Setdata> tuple, double entropy)
+double CalGainRatio(vector<Setdata> &tuple, vector<Setdata> &split_1, vector<Setdata> &split_2, double &gain)
 {
-	return 2 * CalEntropy(tuple) - entropy;
+	double total, num_split_1, num_split_2, info;
+	total = tuple.size();
+	num_split_1 = split_1.size();
+	num_split_2 = split_2.size();
+
+	double p1, p2;
+	p1 = (double)num_split_1 / total;
+	p2 = (double)num_split_2 / total;
+
+	info = -(p1 * log(p1) / log(2) + p2 * log(p2) / log(2));
+	return gain / info;
+
 }
 
 bool AscendSortByPro0(const Setdata & st1, const Setdata & st2)
 {
 	if (st1.property[0] < st2.property[0]) return 1;
-	else if (st1.property[0] == st2.property[0]){
-			if (st1.label < st2.label) return 1;
-			else return 0;
-		}
+	else if (st1.property[0] == st2.property[0]) {
+		if (st1.label < st2.label) return 1;
+		else return 0;
+	}
 	else return 0;
 
 }
@@ -149,9 +162,9 @@ bool IsPure(vector<Setdata> &tuple)
 	return true;
 }
 
-int BuildDecisionTree_ID3();
+int BuildDecisionTree_C4_5();
 
-int BuildDecisionTree_C4_5(vector<Setdata> tuple, BiTNode* &DT_node)
+int BuildDecisionTree_ID3(vector<Setdata> &tuple, BiTNode* &DT_node)
 {
 	// 第一步：判断所有实例是否都属于同一类，如果是，则到达叶子节点
 	if (IsPure(tuple)) {
@@ -166,9 +179,9 @@ int BuildDecisionTree_C4_5(vector<Setdata> tuple, BiTNode* &DT_node)
 	vector<Setdata> setdata_new[PROPERTY_NUM];
 	vector<Setdata> split_1, split_2;
 
-	double entropy_min = 10, entropy_temp;
+	double entropy_max = -1, entropy_temp;
 	double split_value = 0;
-	int min_index[2] ; // [0]代表属性 [1]代表划分下标
+	int min_index[2]; // [0]代表属性 [1]代表划分下标
 
 	// 在各个属性之间寻找熵最小的划分
 	for (int i = 0; i < PROPERTY_NUM; i++)
@@ -182,23 +195,25 @@ int BuildDecisionTree_C4_5(vector<Setdata> tuple, BiTNode* &DT_node)
 		case 3:sort(setdata_new[i].begin(), setdata_new[i].end(), AscendSortByPro3); break;
 		default:
 			break;
-		}		
+		}
 
 		for (vector<Setdata>::iterator iter = setdata_new[i].begin(); iter < setdata_new[i].end() - 1; iter++)
 		{
 			if (iter->label == (iter + 1)->label) continue;
 			else {
-				split_1.assign(setdata_new[i].begin(), iter+1);
+				split_1.assign(setdata_new[i].begin(), iter + 1);
 				// test // cout << "split_1=" << split_1.size()<<endl;
 				split_2.assign(iter + 1, setdata_new[i].end());
 				// test // cout << "split_2=" << split_2.size() << " ";
-				entropy_temp = CalEntropy(split_1) + CalEntropy(split_2);
 
-				//CalGain_2()
+				// 计算信息增益
+				entropy_temp = CalGain(tuple, split_1, split_2);
+				// C4.5 //entropy_temp = CalGainRatio(tuple, split_1, split_2, entropy_temp);
 
-				// test // cout << i << "\t" << int(iter - setdata_new.begin()) << " " << entropy_temp << endl;
-				if (entropy_min > entropy_temp) {
-					entropy_min = entropy_temp;
+				// test // cout << i << "\t"<< entropy_temp << endl;
+				// 选择最大信息增益
+				if (entropy_max < entropy_temp) {
+					entropy_max = entropy_temp;
 					split_value = (iter->property[i] + (iter + 1)->property[i]) / 2;
 					min_index[0] = i;
 					min_index[1] = int(iter - setdata_new[i].begin());
@@ -209,12 +224,12 @@ int BuildDecisionTree_C4_5(vector<Setdata> tuple, BiTNode* &DT_node)
 
 	/* ======================== 以下为 test ========================
 
-	cout << "此次最佳分裂点在属性" << min_index[0] << "的下标" 
-		<< setw(2) << min_index[1] << "与" << setw(2) << min_index[1] + 1 
+	cout << "此次最佳分裂点在属性" << min_index[0] << "的下标"
+		<< setw(2) << min_index[1] << "与" << setw(2) << min_index[1] + 1
 		<< "之间，分裂中值为 " << setw(6) << split_value;
 
 	======================== 以上为 test ======================== */
-	
+
 	split_1.assign(setdata_new[min_index[0]].begin(), setdata_new[min_index[0]].begin() + min_index[1] + 1);//setdata_new[min_index[0]][min_index[1]]
 	split_2.assign(setdata_new[min_index[0]].begin() + min_index[1] + 1, setdata_new[min_index[0]].end());
 
@@ -223,10 +238,10 @@ int BuildDecisionTree_C4_5(vector<Setdata> tuple, BiTNode* &DT_node)
 	DT_node->label = min_index[0];
 	// test //cout << DT_node->lchild << DT_node->rchild;
 	// test //cout << " split_1=" << setw(2) << split_1.size();
-	BuildDecisionTree_C4_5(split_1, DT_node->lchild);
+	BuildDecisionTree_ID3(split_1, DT_node->lchild);
 	// test //cout << " split_2=" << setw(2) << split_2.size() << endl;
-	BuildDecisionTree_C4_5(split_2, DT_node->rchild);
-	
+	BuildDecisionTree_ID3(split_2, DT_node->rchild);
+
 	return 0;
 }
 
@@ -249,7 +264,7 @@ double JudgeLable(vector<Setdata> testdata)
 				if (temp->label != iter->label) counter++;
 				break;
 			}
-		}	
+		}
 	}
 	return ((double)(testdata.size() - counter) / (double)testdata.size());
 }
@@ -258,7 +273,7 @@ int printDT(BiTNode *node)
 {
 	if (node)
 	{
-		cout << node->label <<'\t'<<node->judge << endl;
+		cout << node->label << '\t' << node->judge << endl;
 		printDT(node->lchild);
 		printDT(node->rchild);
 	}
@@ -268,17 +283,19 @@ int printDT(BiTNode *node)
 int main()
 {
 	// 读取训练数据
+	//ReadTxt("testdata.txt");
 	ReadTxt("traindata.txt");
 
 	// 利用训练数据构建决策树
-	BuildDecisionTree_C4_5(setdata, DT);
-	
+	BuildDecisionTree_ID3(setdata, DT);
+
 	// 读取测试数据
 	setdata.clear();
 	ReadTxt("testdata.txt");
+	//ReadTxt("traindata.txt");
 
 	// 通过决策树给数据分类
-	cout << JudgeLable(setdata);
+	cout << JudgeLable(setdata) << endl;
 
 	return 0;
 }
